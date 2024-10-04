@@ -1,151 +1,48 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
-
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
+# Load dataset
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def load_data():
+    return pd.read_csv("https://raw.githubusercontent.com/Hansmode/T2B/refs/heads/main/day.csv")
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# Main function
+def main():
+    st.title("Bike Sharing Data Visualization")
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    # Load the data
+    customers_df = load_data()
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # Data cleaning
+    customers_df.drop_duplicates(inplace=True)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    # Visualization 1: Average bike rentals by season
+    st.subheader('Rata-rata Jumlah Peminjam Sepeda Berdasarkan Season')
+    avg_rentals_season = customers_df.groupby(by="season")["cnt"].mean().reset_index()
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    sns.barplot(x="season", y="cnt", data=avg_rentals_season, palette="coolwarm", ax=ax1)
+    ax1.set_title('Rata-rata Jumlah Peminjam Sepeda Berdasarkan Season', fontsize=14)
+    ax1.set_xlabel('Season', fontsize=12)
+    ax1.set_ylabel('Rata-rata Jumlah Peminjam', fontsize=12)
+    ax1.set_xticklabels(['1', '2', '3', '4'])
+    ax1.grid(True)
 
-    return gdp_df
+    st.pyplot(fig1)
 
-gdp_df = get_gdp_data()
+    # Visualization 2: Total registered users by year
+    st.subheader('Total Peminjam Terdaftar Berdasarkan Tahun')
+    total_registered_year = customers_df.groupby(by="yr")["registered"].sum().reset_index()
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    sns.barplot(x='yr', y='registered', data=total_registered_year, palette='coolwarm', ax=ax2)
+    ax2.set_title('Total Peminjam Terdaftar Berdasarkan Tahun', fontsize=16)
+    ax2.set_xlabel('Tahun', fontsize=12)
+    ax2.set_ylabel('Total Peminjam Terdaftar', fontsize=12)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+    st.pyplot(fig2)
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+if __name__ == "__main__":
+    main()
